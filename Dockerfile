@@ -1,0 +1,70 @@
+FROM alpine:3.5
+
+ENV LANG=en_US.UTF-8 \
+    HOME=/opt/app/
+
+# Install Erlang
+RUN mkdir -p /tmp/erlang-build && \
+    cd /tmp/erlang-build && \
+    # Create default user and home directory, set owner to default
+    mkdir -p ${HOME} && \
+    adduser -s /bin/sh -u 1001 -G root -h ${HOME} -S -D default && \
+    chown -R 1001:0 ${HOME} && \
+    # Add edge repos tagged so that we can selectively install edge packages
+    echo "@edge http://dl-cdn.alpinelinux.org/alpine/edge/main" >> /etc/apk/repositories && \
+    # Upgrade Alpine and base packages
+    apk --no-cache upgrade && \
+    # Install Erlang/OTP deps
+    apk add --no-cache \
+      ca-certificates \
+      openssl-dev \
+      ncurses-dev \
+      unixodbc-dev \
+      zlib-dev && \
+    # Install Erlang/OTP build deps
+    apk add --no-cache --virtual .erlang-build \
+      git autoconf build-base perl-dev && \
+    # Shallow clone Erlang/OTP
+    git clone -b OTP-19.2.1 --single-branch --depth 1 https://github.com/erlang/otp.git . && \
+    # Erlang/OTP build env
+    export ERL_TOP=/tmp/erlang-build && \
+    export PATH=$ERL_TOP/bin:$PATH && \
+    export CPPFlAGS="-D_BSD_SOURCE $CPPFLAGS" && \
+    # Configure
+    ./otp_build autoconf && \
+    ./configure --prefix=/usr \
+      --sysconfdir=/etc \
+      --mandir=/usr/share/man \
+      --infodir=/usr/share/info \
+      --without-javac \
+      --without-wx \
+      --without-debugger \
+      --without-observer \
+      --without-jinterface \
+      --without-cosEvent\
+      --without-cosEventDomain \
+      --without-cosFileTransfer \
+      --without-cosNotification \
+      --without-cosProperty \
+      --without-cosTime \
+      --without-cosTransactions \
+      --without-dialyzer \
+      --without-et \
+      --without-gs \
+      --without-ic \
+      --without-megaco \
+      --without-orber \
+      --without-percept \
+      --without-typer \
+      --enable-threads \
+      --enable-shared-zlib \
+      --enable-ssl=dynamic-ssl-lib \
+      --enable-hipe && \
+    # Build
+    make -j4 && make install && \
+    # Cleanup
+    apk del .erlang-build && \
+    cd $HOME && \
+    rm -rf /tmp/erlang-build && \
+    # Update ca certificates
+    update-ca-certificates --fresh
